@@ -1,7 +1,4 @@
 # -*- coding: utf-8 -*-
-import time
-import threading
-import os
 
 from baseClass import *
 
@@ -19,7 +16,7 @@ class ImgDownloader(BaseClass, HttpBaseClass):
         self.imgDict = imgDict
         self.waitFor = 20  # 图片动则数M，所以以20s作为超时时间（在100k的网络下20s可以下载2M的图片，够用了）
         self.maxTry = 5
-        self.getCacheSet()
+        self.cleanImgDict()
 
     def leader(self):
         times = 0
@@ -36,9 +33,6 @@ class ImgDownloader(BaseClass, HttpBaseClass):
         '''
         threadPool = []
         for fileName in self.imgDict.keys():
-            if fileName in self.cacheSet:
-                del self.imgDict[fileName]
-                continue
             threadPool.append(threading.Thread(target=self.worker, kwargs={'fileName': fileName}))
 
         for thread in threadPool:
@@ -55,8 +49,6 @@ class ImgDownloader(BaseClass, HttpBaseClass):
         重复的次数由self.maxTry指定
         这样可以给知乎服务器留出生成页面缓存的时间
         """
-        if fileName in self.complete:
-            return
         link = self.imgDict[fileName]
 
         threadID = ThreadClass.getUUID()
@@ -73,6 +65,12 @@ class ImgDownloader(BaseClass, HttpBaseClass):
         ThreadClass.releaseThreadPoolPassport(threadID)
         return
 
-    def getCacheSet(self):
-        self.cacheSet = set(os.listdir(self.targetDir))
+    def cleanImgDict(self):
+        u'''
+        移除imgDict中已下载过的文件
+        '''
+        cacheSet = set(os.listdir(self.targetDir))
+        for fileName in self.imgDict.keys():
+            if fileName in cacheSet:
+                del self.imgDict[fileName]
         return
