@@ -1,6 +1,319 @@
 # -*- coding: utf-8 -*-
+import re
+
 from baseClass import *
 
+u"""
+今天把这个的数据结构解决一下
+分为两块
+    *   问题包
+    *   答案包
+以问题作为一级页，问题之上还可以再加章节
+基础元素是问题
+问题 + 问题 => 小节
+小节 + 小节 => 章
+章 + 章 => 书
+书 + 书 => 书
+
+答案结构
+    *   答案相关属性
+
+问题结构
+    *   问题
+        *   问题输出方法
+            *   指将问题转换为可读的dict/list的方法
+        *   题目必要信息
+            *   题目相关属性
+            *   题目内容
+        *   答案列表
+            *   答案abc
+            *   答案列表属性
+            *   答案输出方法
+
+章节结构
+    *   节
+        *   小节属性
+            *   与小节相关的属性
+        *   小节目录
+        *   问题列表
+            *   其内为一个一个的问题
+        *   问题输出方法
+            *   控制节内问题的排序，展示
+
+    *   章
+        *   章属性
+        *   章目录
+        *   小节列表
+        *   小节输出方法
+        *   章前言
+"""
+
+
+class Content():
+    u"""
+    用于承载html内容，自动整理格式，提取图片内容链接
+    """
+
+    def __init__(self, content=''):
+        self.setContent(content)
+        return
+
+    def setContent(self, content):
+        self.rawContent = content
+        self.content = content
+        self.removeTag(['noscript'])
+        self.imgDict = {}
+        self.fixPic()
+        return
+
+    def fixPic(self):
+        if SettingClass.PICQUALITY == 0:
+            self.removeTag(['img'])
+        content = self.content
+        for imgTag in re.findall(r'<img.*?>', self.content):
+            self.content = content.replace(imgTag, self.fixImgTag(imgTag))
+        return
+
+    def fixImgTag(self, imgContent):
+        src = ''
+        try:
+            # 判断是否为tex图片
+            imgContent.index('equation?tex=')
+            result = re.search(r'zhihu.com/equation\?tex=[^"]+', imgContent)
+            if result != None:
+                src = result.group(0)
+            fileSrc = '../images/{0}.jpg'.format(BaseClass.md5(src))
+        except:
+            try:
+                imgContent.index('data-actualsrc')
+                src = re.search(r"""(?<=data-actualsrc\="//)[^"]+""", imgContent).group(0)
+                if SettingClass.PICQUALITY == 2:
+                    result = re.search(r"""(?<=data-original\="//)[^"]+""", imgContent)
+                    if result != None:
+                        src = result.group(0)
+            except:
+                pass
+            finally:
+                fileSrc = '../images/{0}'.format(BaseClass.getHttpFileName(src))
+        imgContent = '''
+                        <div class="duokan-image-single">\n
+                            <img src="{0}"></img>\n
+                        </div>\n
+                     '''.format(fileSrc)
+        self.imgDict[fileSrc] = src
+        return imgContent
+
+    def getImgDict(self):
+        return self.imgDict
+
+    def removeTag(self, tagname=[]):
+        for tag in tagname:
+            self.content = self.content.replace('</' + tag + '>', '')
+            self.content = re.sub(r"<" + tag + r'.*?>', '', self.content)
+        return self
+
+
+class BaseItem(BaseClass):
+    def __init__(self, property={}):
+        #   初始化属性
+        self.initProperty()
+        #   将属性存入记录中
+        for key in property:
+            self.property[key] = property[key]
+        self.customerInit()
+        return
+
+    def customerInit(self):
+        #   在此自定义init函数
+        return
+
+    def initProperty(self):
+        self.property = {}
+        self.itemList = []
+        return
+
+    def getProperty(self, key):
+        return self.property.get(key, '')
+
+
+class AnswerItem(BaseItem):
+    u"""
+    基础类，仅用于保存数据，不提供额外行为
+    """
+
+    def initProperty(self):
+        self.property = {
+            'authorID': 0,
+            'authorSign': '',
+            'authorLogo': '',
+            'authorName': '',
+            'questionID': 0,
+            'answerID': 0,
+            'content': Content(),
+            'updateDate': '2000-01-01',
+            'agreeCount': 0,
+            'commentCount': 0,
+            'collectCount]': 0,
+        }
+        return
+
+    def getPicDict(self):
+        return self.getProperty('content').getImgDict()
+
+
+class QuestionItem(BaseItem):
+    def initProperty(self):
+        self.property = {
+            'questionID': 0,
+            'followCount': 0,
+            'viewCount': 0,
+            'commentCount': 0,
+            'answerCount': 0,
+            'questionTitle': '',
+            'desc': Content(),
+            'collapsedCount': '0',
+            'answerDict': {},
+            'length': self.__len__(),
+        }
+        return self
+
+    def addAnswer(self, answer):
+        self.getProperty('answerDict')[answer.getProperty('answerID')] = answer
+        return self
+
+    def __len__(self):
+        return len(self.getProperty('answerDict'))
+
+    def getPicDict(self):
+        picDict = {}
+        for key in self.getProperty('answerDict'):
+            picDict.update(self.getProperty('answerDict')[key].getPicDict())
+        picDict.update(self.getProperty('desc').getPicDict())
+        return picDict
+
+    """
+    暂时废弃这个功能
+    def sortBy(self, key, reverse=True):
+        u'''
+        对answerList按指定属性进行排序
+        todo 需要测试正确性
+        '''
+        self.getProperty('answerList').sort(cmp=lambda x, y: x.getProperty(key) > y.getProperty(key), reverse=reverse)
+        return self
+    """
+
+    def addQuestion(self, question):
+        u"""
+        问题 + 问题 => 节
+        """
+        if question.getProperty('questionID') == self.getProperty('questionID'):
+            self.getProperty('answerDict').update(question.getProperty('answerDict'))
+            return self
+        else:
+            section = SectionItem()
+            section.addQuestion(self)
+            section.addQuestion(question)
+            return section
+
+
+class SectionItem(BaseItem):
+    def initProperty(self):
+        self.property = {
+            'sectionTitle': '',
+            'sectionDesc': Content(),
+            'questionDict': {},
+        }
+        return self
+
+    def addQuestion(self, question):
+        key = question.getProperty('questionID')
+        if key in self.getProperty('questionDict'):
+            self.getProperty('questionDict').addQuestion(question)
+        else:
+            self.getProperty('questionDict')[key] = question
+        return self
+
+    def getPicDict(self):
+        picDict = {}
+        for key in self.getProperty('questionDict'):
+            picDict.update(self.getProperty('questionDict')[key].getPicDict())
+        picDict.update(self.getProperty('sectionDesc').getPicDict())
+        return picDict
+
+    def __len__(self):
+        length = 0
+        questionDict = self.getProperty('questionDict')
+        for key in questionDict:
+            length += len(questionDict[key])
+        return length
+
+    def addSection(self, section):
+        chapter = ChapterItem()
+        chapter.addSection(self)
+        chapter.addSection(section)
+        return chapter
+
+
+class AuthorSection(SectionItem):
+    u"""
+    用于生成用户信息页
+    """
+
+    def initProperty(self):
+        self.property = {
+            'sectionTitle': '',
+            'sectionDesc': Content(),
+            'questionDict': {},
+        }
+        return self
+
+
+class ChapterItem(BaseItem):
+    def initProperty(self):
+        self.property = {
+            'chapterTitle': '',
+            'chapterDesc': Content(),
+            'sectionList': [],
+        }
+        return self
+
+    def addQuestion(self, question):
+        if len(self.getProperty('sectionList')) == 0:
+            section = SectionItem()
+            section.addQuestion(question)
+            self.addSection(section)
+        else:
+            section = self.getProperty('sectionList')[-1]
+            section.addQuestion(question)
+        return self
+
+    def addSection(self, section):
+        self.getProperty('sectionList').append(section)
+        return self
+
+    def addChapter(self, chapter):
+        book = BookItem()
+        book.addChapter(self)
+        book.addChapter(chapter)
+        return book
+
+
+class BookItem(BaseItem):
+    u"""
+    仅用于保存数据
+    """
+
+    def initProperty(self):
+        self.property = {
+            'bookTitle': '',
+            'bookDesc': Content(),
+            'chapterList': [],
+        }
+        return
+
+    def addChapter(self, chapter):
+        self.getProperty('chapterList').append(chapter)
+        return
 
 class Package(BaseClass):
     u'''

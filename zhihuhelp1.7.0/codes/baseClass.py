@@ -6,6 +6,7 @@ import traceback
 import uuid  # 生成线程唯一ID，用于控制线程数
 import logging
 import logging.handlers
+import hashlib
 
 
 class BaseClass(object):
@@ -24,6 +25,9 @@ class BaseClass(object):
     logger.addHandler(handler)  # 为logger添加handler
     logger.setLevel(logging.INFO)  # 发布时关闭log输出
     # logger.setLevel(logging.DEBUG)  # debug模式
+
+    MD5 = hashlib.md5()
+
     # 辅助函数
     @staticmethod
     def printInOneLine(text=''):  # Pass
@@ -83,6 +87,15 @@ class BaseClass(object):
             BaseClass.mkdir(path)
             os.chdir(path)
         return
+
+    @staticmethod
+    def md5(content):
+        BaseClass.MD5.update(content)
+        return BaseClass.MD5.hexdigest()
+
+    @staticmethod
+    def getHttpFileName(src):
+        return src.spilt('/')[-1]
 
 
 class SettingClass(object):
