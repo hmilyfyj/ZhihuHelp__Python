@@ -6,6 +6,9 @@ import datetime  # 简单处理时间
 from baseClass import *
 from bs4 import BeautifulSoup
 
+"""
+#todo 这一块也需要改正，很有可能出现没找到对应元素，对None取值的情况
+"""
 
 class Parse(BaseClass):
     def __init__(self, content):
@@ -182,7 +185,7 @@ class ParseQuestion(Parse):
         questionInfoDict['questionCommentCount'] = self.matchInt(bufString)
         questionInfoDict['questionDesc'] = self.getTagContent(
             self.content.find("div", {"id": "zh-question-detail"}).find('div'))
-        bufString = self.content.find("h3", {"id": "zh-question-answer-num"})['data-num']
+        bufString = self.getContentAttr(self.content.find("h3", {"id": "zh-question-answer-num"}), 'data-num')
         questionInfoDict['questionAnswerCount'] = self.matchInt(bufString)
 
         bufString = self.content.find("div", {"id": "zh-question-side-header-wrap"}).find("div", {

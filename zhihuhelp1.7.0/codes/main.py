@@ -73,6 +73,10 @@ class ZhihuHelp(BaseClass):
         """
         taskCaptureQueen = {}
         taskCollectionQueen = []
+        #   要求：对ReadList语句进行语法分析，然后生成一串长sql语句
+        #   ReadList转SQL，查出来所有的问题=>答案对即可
+        #   先查出来所有的问题信息,然后查出来所有的答案信息，交由电子书生成器进行整理
+        #
         for kind in self.urlKindList:
             taskCaptureQueen[kind + 'Queen'] = []
         for rawUrl in line.split('$'):
@@ -223,7 +227,7 @@ class ZhihuHelp(BaseClass):
         """
         urlInfo = self.detectUrl(rawUrl)
         if not 'kind' in urlInfo:
-            # 卫语
+            # 卫语句
             urlInfo['kind'] = ''
             return urlInfo
         urlInfo['baseSetting'] = {}

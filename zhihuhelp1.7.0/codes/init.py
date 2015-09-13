@@ -36,7 +36,7 @@ class Init(object):
             cursor.execute("""CREATE TABLE AnswerContent(
                             authorID            VARCHAR(255)    NOT NULL    DEFAULT '',
                             authorSign          VARCHAR(2000)   NOT NULL    DEFAULT '',
-                            authorLogo          VARCHAR(255)    NOT NULL    DEFAULT '',
+                            authorLogo         VARCHAR(255)    NOT NULL    DEFAULT '',
                             authorName          VARCHAR(255)    NOT NULL    DEFAULT '',
         
                             answerAgreeCount    INT(8)          NOT NULL    DEFAULT 0,
@@ -56,16 +56,16 @@ class Init(object):
 
             # 核心:问题信息数据
             cursor.execute("""CREATE TABLE QuestionInfo(
-                            questionIDinQuestionDesc     INT(8)       NOT NULL    DEFAULT 0,
-                            questionCommentCount         INT(8)       NOT NULL    DEFAULT 0,
-                            questionFollowCount          INT(8)       NOT NULL    DEFAULT 0,
-                            questionAnswerCount          INT(8)       NOT NULL    DEFAULT 0,
-                            questionViewCount            INT(8)       NOT NULL    DEFAULT 0,
-                            questionTitle                VARCHAR(200) NOT NULL    DEFAULT '',
-                            questionDesc                 longtext     NOT NULL    DEFAULT '',
-                            questionCollapsedAnswerCount INT(8)       NOT NULL    DEFAULT 0,
+                            questionID           INT(8)       NOT NULL    DEFAULT 0,
+                            commentCount         INT(8)       NOT NULL    DEFAULT 0,
+                            followCount          INT(8)       NOT NULL    DEFAULT 0,
+                            answerCount          INT(8)       NOT NULL    DEFAULT 0,
+                            viewCount            INT(8)       NOT NULL    DEFAULT 0,
+                            title                VARCHAR(200) NOT NULL    DEFAULT '',
+                            description          longtext     NOT NULL    DEFAULT '',
+                            collapsedAnswerCount INT(8)       NOT NULL    DEFAULT 0,
 
-                            PRIMARY KEY(questionIDinQuestionDesc))""")
+                            PRIMARY KEY(questionID))""")
 
             # 新数据表
             # 收藏夹内容表
@@ -96,7 +96,7 @@ class Init(object):
                             authorID            VARCHAR(255)    NOT NULL DEFAULT 'null',
                             dataID              VARCHAR(255)    DEFAULT '',
                             sign                VARCHAR(255)    DEFAULT '',
-                            desc                VARCHAR(10000)  DEFAULT '',
+                            description         VARCHAR(10000)  DEFAULT '',
                             name                VARCHAR(255)    DEFAULT '',
                             ask                 VARCHAR(255)    DEFAULT '',
                             answer              INT             DEFAULT 0,
@@ -119,6 +119,7 @@ class Init(object):
                             collectionID        VARCHAR(50)     NOT NULL,
                             title               VARCHAR(255),
                             description         VARCHAR(1000),
+                            lastActiveDate      DATE            NOT NULL    DEFAULT '2000-01-01',
                             authorName          VARCHAR(255),
                             authorID            VARCHAR(255),
                             authorLogo          VARCHAR(255),
@@ -141,9 +142,11 @@ class Init(object):
                             title               VARCHAR(255),
                             logoAddress         VARCHAR(255),
                             description         VARCHAR(3000),
-                            activeCount         INT             DEFAULT 0,
-                            questionCount       INT             DEFAULT 0,
-                            commentCount        INT             DEFAULT 0,
+                            activeCount         INT(20)         DEFAULT 0,
+                            questionCount       INT(20)         DEFAULT 0,
+                            commentCount        INT(20)         DEFAULT 0,
+                            viewCount           INT(20)         DEFAULT 0,
+                            followCount         INT(20)         DEFAULT 0,
                             tableID             VARCHAR(50),
                             PRIMARY KEY (tableID))""")  # 负责保存圆桌信息
 
@@ -160,7 +163,7 @@ class Init(object):
                         columnLogo      VARCHAR(255)    NOT NULL    DEFAULT '',
                         description     VARCHAR(3000)   NOT NULL    DEFAULT '',
                         articleCount    INT(20)         NOT NULL    DEFAULT 0,
-                        followerCount  INT(20)         NOT NULL    DEFAULT 0,
+                        followerCount   INT(20)         NOT NULL    DEFAULT 0,
                         PRIMARY KEY(columnID))""")
 
             # 专栏内容
@@ -179,10 +182,11 @@ class Init(object):
                         titleImage      VARCHAR(255)    NOT NULL    DEFAULT '',
                         articleContent  longtext        NOT NULL    DEFAULT '',
                         commentCount    INT(20)         NOT NULL    DEFAULT 0,
-                        likeCount      INT(20)         NOT NULL    DEFAULT 0,
+                        likeCount       INT(20)         NOT NULL    DEFAULT 0,
                         publishedTime   DATE            NOT NULL    DEFAULT '2000-01-01',
                         PRIMARY KEY(articleHref))""")
 
+            # 快速索引（没啥用）
             cursor.execute("""CREATE INDEX idx_ArticleContent ON ArticleContent(columnID, articleID, authorID);""")
 
             # 用户活动表
@@ -193,17 +197,41 @@ class Init(object):
             # avtiveType:关注/赞同
             # activeTarget:目标网址,使用时自行提取内容
             # TargetType:专栏/收藏夹/问题/专栏文章/答案
-            cursor.execute("""CREATE TABLE userActive(
+            cursor.execute("""CREATE TABLE UserActive(
                         account         VARCHAR(255)    NOT NULL    DEFAULT '',
                         activeTarget    VARCHAR(255)    NOT NULL    DEFAULT '',
                         activeType      VARCHAR(255)    NOT NULL    DEFAULT '',
-                        TargetType      vatchar(255)    NOT NULL    DEFAULT '',
+                        TargetType      VARCHAR(255)    NOT NULL    DEFAULT '',
                         dateTime        INT(20)         NOT NULL    DEFAULT 0,
                         table_id        INTEGER PRIMARY KEY AUTOINCREMENT
                         )""")
 
-            # 我关注的问题表
-            # 这个可以利用用户活动表实现，故不在单独列表
+            # 我赞同的回答列表
+            cursor.execute("""CREATE TABLE UserAgreeAnswer(
+                account         VARCHAR(255)    NOT NULL    DEFAULT '',
+                answerHref      VARCHAR(255)    NOT NULL    DEFAULT '',
+                dateTime        INT(20)         NOT NULL    DEFAULT 0
+            )""")
 
+            # 我关注的问题表
+            cursor.execute("""CREATE TABLE UserFollowsQuestion(
+                account         VARCHAR(255)    NOT NULL    DEFAULT '',
+                questionID      VARCHAR(255)    NOT NULL    DEFAULT '',
+                answerCount     INT(20)         NOT NULL    DEFAULT 0,
+                followerCount   INT(20)         NOT NULL    DEFAULT 0
+            )""")
+
+            # 我关注的话题表
+            cursor.execute("""CREATE TABLE UserFollowsTopic(
+                account         VARCHAR(255)    NOT NULL    DEFAULT '',
+                topicID         VARCHAR(255)    NOT NULL    DEFAULT ''
+            )""")
+
+            # 我关注的专栏表
+            cursor.execute("""CREATE TABLE UserFollowsColumn(
+                account         VARCHAR(255)    NOT NULL    DEFAULT '',
+                columnID        VARCHAR(255)    NOT NULL    DEFAULT '',
+                articleCount    INT(20)         NOT NULL    DEFAULT 0
+            )""")
 
             self.conn.commit()
