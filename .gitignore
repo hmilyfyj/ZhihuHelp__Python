@@ -219,3 +219,4 @@ ReadList.txt
 misc.xml
 *.db
 *.ini
+.idea/workspace.xml
