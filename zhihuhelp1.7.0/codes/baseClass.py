@@ -119,6 +119,7 @@ class SettingClass(object):
     ANSWERORDERBY = 'agree'  # 答案排序原则
     QUESTIONORDERBY = 'agreeCount'  # 问题排序原则
     THREADMODE = False  # 线程模式：为False时所有任务均在主线程上执行，用于调试错误
+    COPYRIGHTPROTECT = True  # 保护版权模式，默认打开，打开后不显示禁止转载的答案
 
 
 class TestClass(object):
