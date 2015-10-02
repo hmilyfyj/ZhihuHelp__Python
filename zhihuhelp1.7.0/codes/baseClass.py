@@ -8,6 +8,9 @@ import logging
 import logging.handlers
 import hashlib
 
+import traceback  # 用于捕获错误信息
+import time
+
 
 class SettingClass(object):
     u"""
@@ -127,7 +130,20 @@ class BaseClass(object):
     def getHttpFileName(src):
         return src.spilt('/')[-1]
 
-
+    @staticmethod
+    def errorReport(errorUrl='', error=None):
+        BaseClass.logger.info(u"分析网页时出现错误，错误信息为：")
+        traceback.print_tb(sys.exc_traceback)
+        second = str(time.time())
+        f = open("ErrorReport_" + second + ".txt", "ab+")  # 应该使用错误报告文件，不应该动ReadList
+        f.write(u"\n#-----------------------\n" + u"发生时间:\n" + time.strftime("%Y-%m-%d  %H:%M:%S", time.gmtime()))
+        f.write(u"\n*    " + u"异常网址:\n" + str(errorUrl))
+        f.write(u"\n*    " + u"异常信息:\n" + str(error))
+        f.write(u"\n*    " + u"异常栈:\n")
+        traceback.print_tb(sys.exc_traceback, file=f)
+        f.write(u"\nover" + u"\n-----------------------\n")
+        f.close()
+        return
 
 class TestClass(object):
     u"""

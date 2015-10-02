@@ -2,6 +2,7 @@
 
 import json  # 用于JsonWorker
 
+
 from contentParse import *
 
 
@@ -10,7 +11,7 @@ class WorkerFactory():
     适配器
     """
 
-    def __init__(self, urlInfoKind):
+    def __init__(self, commandInfoKind):
         self.kindList = ['answer', 'question', 'author', 'collection', 'table', 'topic', 'article', 'column']
         return
 
@@ -49,11 +50,12 @@ class PageWorker(BaseClass, HttpBaseClass, SqlClass):
         但专栏不需要，所以专栏处又重载了一回
         """
         self.workSchedule = {}
-        detectUrl = self.url + self.suffix + str(self.maxPage)
+        rawUrl = self.commandInfo['rawUrl']
+        detectUrl = rawUrl + self.suffix + str(self.maxPage)
         content = self.getHttpContent(url=detectUrl, extraHeader=self.extraHeader)
         self.maxPage = self.getMaxPage(content)
         for i in range(self.maxPage):
-            self.workSchedule[i] = self.url + self.suffix + str(i + 1)
+            self.workSchedule[i] = rawUrl + self.suffix + str(i + 1)
 
     def addProperty(self):
         return
@@ -138,43 +140,43 @@ class QuestionQueenWorker(PageWorker):
             taskTimer += 1
             BaseClass.logger.debug(u'开始启动线程')
             completeFlag = True  # 放置于前，避免taskQueen为空
-            for urlInfo in self.taskQueen:
-                if 'maxPage' in urlInfo:
+            for commandInfo in self.taskQueen:
+                if 'maxPage' in commandInfo:
                     continue
                 else:
-                    BaseClass.logger.info(u'开始获取网址: ' + urlInfo['baseUrl'] + u' 的最大页数')
+                    BaseClass.logger.info(u'开始获取网址: ' + commandInfo['rawUrl'] + u' 的最大页数')
                     completeFlag = False
                     if SettingClass.THREADMODE:
-                        t = threading.Thread(target=self.detectMaxPage, kwargs={'urlInfo': urlInfo})
+                        t = threading.Thread(target=self.detectMaxPage, kwargs={'commandInfo': commandInfo})
                         ThreadClass.startRegisterThread()
                         t.start()
                         ThreadClass.waitForThreadRunningCompleted()
                     else:
-                        self.detectMaxPage(urlInfo)
+                        self.detectMaxPage(commandInfo)
             BaseClass.logger.info(u'第{}轮所有线程启动完毕，等待线程运行结束'.format(taskTimer))
             ThreadClass.waitForThreadRunningCompleted(0)  # 确保所有线程运行完毕 # 但在开始等待前，线程可能还没在threadClass里成功注册上
             BaseClass.logger.info(u'第{}轮任务所有线程运行结束，准备执行第{}轮任务'.format(taskTimer, taskTimer + 1))
 
-        for urlInfo in self.taskQueen:
-            for i in range(urlInfo['maxPage']):
-                self.workSchedule[workerNo] = urlInfo['baseUrl'] + self.suffix + str(i + 1)
+        for commandInfo in self.taskQueen:
+            for i in range(commandInfo['maxPage']):
+                self.workSchedule[workerNo] = commandInfo['rawUrl'] + self.suffix + str(i + 1)
                 workerNo += 1
 
-    def detectMaxPage(self, urlInfo):
+    def detectMaxPage(self, commandInfo):
         # 通过全球唯一的uuid来实现对线程数的控制
         threadID = ThreadClass.getUUID()
         BaseClass.logger.debug(u'detectMaxPage开始等待执行， threadID = ' + str(threadID))
         while not ThreadClass.acquireThreadPoolPassport(threadID):
             time.sleep(0.1)
-        BaseClass.logger.info(u"开始检测 " + urlInfo['baseUrl'] + u' 的页数')
-        detectUrl = urlInfo['baseUrl'] + self.suffix + str(self.maxPage)  # 检测问题的最大页数, 使用maxPage, 为扩展留出空间
+        BaseClass.logger.info(u"开始检测 " + commandInfo['rawUrl'] + u' 的页数')
+        detectUrl = commandInfo['rawUrl'] + self.suffix + str(self.maxPage)  # 检测问题的最大页数, 使用maxPage, 为扩展留出空间
         content = self.getHttpContent(url=detectUrl, extraHeader=self.extraHeader)
         if len(content) != 0:
-            urlInfo['maxPage'] = self.getMaxPage(content)
+            commandInfo['maxPage'] = self.getMaxPage(content)
         else:
-            urlInfo['tryCount'] = urlInfo.get('tryCount', 0) + 1
-            if urlInfo['tryCount'] >= SettingClass.MAXTRY:
-                urlInfo['maxPage'] = 1
+            commandInfo['tryCount'] = commandInfo.get('tryCount', 0) + 1
+            if commandInfo['tryCount'] >= SettingClass.MAXTRY:
+                commandInfo['maxPage'] = 1
         ThreadClass.releaseThreadPoolPassport(threadID)
         return
 
@@ -202,7 +204,6 @@ class QuestionQueenWorker(PageWorker):
                 self.worker(key)
             BaseClass.printInOneLine(u'正在读取答案页面，还有{}/{}张页面等待读取'.format(workScheduleLength - index, workScheduleLength))
             ThreadClass.waitForThreadRunningCompleted()
-
         ThreadClass.waitForThreadRunningCompleted(0)  # 确保所有线程都已经执行完毕
 
         for questionInfoDict in self.questionInfoDictList:
@@ -244,7 +245,14 @@ class QuestionQueenWorker(PageWorker):
             return False
         BaseClass.logger.debug(u'开始使用ParseQuestion分析网页{}内容'.format(self.workSchedule[workNo]))
         parse = ParseQuestion(content)
-        questionInfoDictList, answerDictList = parse.getInfoDict()
+
+        questionInfoDictList = []
+        answerDictList = []
+        try:
+            questionInfoDictList, answerDictList = parse.getInfoDict()
+        except Exception as error:
+            BaseClass.errorReport(self.workSchedule[workNo], error)
+
         for questionInfoDict in questionInfoDictList:
             self.questionInfoDictList.append(questionInfoDict)
         for answerDict in answerDictList:
@@ -271,8 +279,8 @@ class AnswerQueenWorker(QuestionQueenWorker):
         """
         self.workSchedule = {}
         workerNo = 0
-        for urlInfo in self.taskQueen:
-            self.workSchedule[workerNo] = urlInfo['baseUrl']
+        for commandInfo in self.taskQueen:
+            self.workSchedule[workerNo] = commandInfo['rawUrl']
             workerNo += 1
 
     def realWorker(self, workNo=0):
@@ -280,7 +288,14 @@ class AnswerQueenWorker(QuestionQueenWorker):
         if content == '':
             return False
         parse = ParseAnswer(content)
-        questionInfoDictList, answerDictList = parse.getInfoDict()
+
+        questionInfoDictList = []
+        answerDictList = []
+        try:
+            questionInfoDictList, answerDictList = parse.getInfoDict()
+        except Exception as error:
+            BaseClass.errorReport(self.workSchedule[workNo], error)
+
         for questionInfoDict in questionInfoDictList:
             self.questionInfoDictList.append(questionInfoDict)
         for answerDict in answerDictList:
@@ -290,6 +305,14 @@ class AnswerQueenWorker(QuestionQueenWorker):
 
 class AuthorWorker(PageWorker):
     def start(self):
+        for commandInfo in self.commandInfoList:
+            BaseClass.logger.info(u"正在抓取{}的答案内容".format(commandInfo['rawUrl']))
+            self.commandInfo = commandInfo
+            self.startOne()
+            BaseClass.logger.info(u"{}的答案内容抓取完成".format(commandInfo['rawUrl']))
+        return
+
+    def startOne(self):
         self.complete = set()
         maxTry = SettingClass.MAXTRY
         while maxTry > 0 and len(self.workSchedule) > len(self.complete):
@@ -321,6 +344,7 @@ class AuthorWorker(PageWorker):
         # self.clearIndex()
 
         self.catchFrontInfo()
+
         self.questionInfoDictList = []
         self.answerDictList = []
         for key in self.workSchedule:
@@ -344,12 +368,18 @@ class AuthorWorker(PageWorker):
         return
 
     def catchFrontInfo(self):
-        content = self.getHttpContent(url=self.urlInfo['infoUrl'], extraHeader=self.extraHeader, timeout=self.waitFor)
+        content = self.getHttpContent(url=self.commandInfo['rawUrl'], extraHeader=self.extraHeader,
+                                      timeout=self.waitFor)
         if content == '':
             return
         parse = AuthorInfoParse(content)
-        infoDict = parse.getInfoDict()
-        self.save2DB(self.cursor, infoDict, 'authorID', 'AuthorInfo')
+
+        try:
+            infoDict = parse.getInfoDict()
+            self.save2DB(self.cursor, infoDict, 'authorID', 'AuthorInfo')
+        except Exception as error:
+            BaseClass.errorReport(self.commandInfo['rawUrl'], error)
+
         return
 
     def worker(self, workNo=0):
@@ -388,7 +418,14 @@ class AuthorWorker(PageWorker):
         if content == '':
             return False
         parse = ParseAuthor(content)
-        questionInfoDictList, answerDictList = parse.getInfoDict()
+
+        questionInfoDictList = []
+        answerDictList = []
+        try:
+            questionInfoDictList, answerDictList = parse.getInfoDict()
+        except Exception as error:
+            BaseClass.errorReport(self.workSchedule[workNo], error)
+
         for questionInfoDict in questionInfoDictList:
             self.questionInfoDictList.append(questionInfoDict)
         for answerDict in answerDictList:
@@ -405,13 +442,7 @@ class AuthorWorker(PageWorker):
 
 class TopicWorker(AuthorWorker):
     def getIndexID(self):
-        topicMatch = re.search(r'(?<=www.zhihu.com/topic/)\d{8}', self.url)
-        if topicMatch == None:
-            print u'抱歉，没能在网址中匹配到话题ID'
-            print u'输入的话题网址为：{}'.format(self.url)
-            print u'程序无法继续运行，请检查网址是否正确后重试'
-            exit()
-        self.topicID = topicMatch.group(0)
+        self.topicID = self.commandInfo['topicID']
         return self.topicID
 
     def clearIndex(self):
@@ -425,20 +456,32 @@ class TopicWorker(AuthorWorker):
         return
 
     def catchFrontInfo(self):
-        content = self.getHttpContent(url=self.urlInfo['infoUrl'], extraHeader=self.extraHeader)
+        content = self.getHttpContent(url=self.commandInfo['rawUrl'], extraHeader=self.extraHeader)
         if content == '':
             return
+
         parse = TopicInfoParse(content)
-        infoDict = parse.getInfoDict()
-        self.save2DB(self.cursor, infoDict, 'topicID', 'TopicInfo')
+        try:
+            infoDict = parse.getInfoDict()
+            self.save2DB(self.cursor, infoDict, 'topicID', 'TopicInfo')
+        except Exception as error:
+            BaseClass.errorReport(self.commandInfo['rawUrl'], error)
+
         return
 
     def realWorker(self, workNo=0):
         content = self.getHttpContent(url=self.workSchedule[workNo], extraHeader=self.extraHeader)
         if content == '':
             return False
+
         parse = ParseTopic(content)
-        questionInfoDictList, answerDictList = parse.getInfoDict()
+        questionInfoDictList = []
+        answerDictList = []
+        try:
+            questionInfoDictList, answerDictList = parse.getInfoDict()
+        except Exception as error:
+            BaseClass.errorReport(self.workSchedule[workNo], error)
+
         for questionInfoDict in questionInfoDictList:
             self.questionInfoDictList.append(questionInfoDict)
         for answerDict in answerDictList:
@@ -455,13 +498,7 @@ class TopicWorker(AuthorWorker):
 
 class CollectionWorker(AuthorWorker):
     def getIndexID(self):
-        collectionMatch = re.search(r'(?<=www.zhihu.com/collection/)\d{8}', self.url)
-        if collectionMatch == None:
-            print u'抱歉，没能在网址中匹配到收藏夹ID'
-            print u'输入的收藏夹网址为：{}'.format(self.url)
-            print u'程序无法继续运行，请检查网址是否正确后重试'
-            exit()
-        self.collectionID = collectionMatch.group(0)
+        self.collectionID = self.commandInfo['collectionID']
         return self.collectionID
 
     def addIndex(self, answerHref):
@@ -470,20 +507,33 @@ class CollectionWorker(AuthorWorker):
         return
 
     def catchFrontInfo(self):
-        content = self.getHttpContent(url=self.urlInfo['infoUrl'], extraHeader=self.extraHeader, timeout=self.waitFor)
+        content = self.getHttpContent(url=self.commandInfo['rawUrl'], extraHeader=self.extraHeader,
+                                      timeout=self.waitFor)
         if content == '':
             return
+
         parse = CollectionInfoParse(content)
-        infoDict = parse.getInfoDict()
-        self.save2DB(self.cursor, infoDict, 'collectionID', 'CollectionInfo')
+        try:
+            infoDict = parse.getInfoDict()
+            self.save2DB(self.cursor, infoDict, 'collectionID', 'CollectionInfo')
+        except Exception as error:
+            BaseClass.errorReport(self.commandInfo['rawUrl'], error)
+
         return
 
     def realWorker(self, workNo=0):
         content = self.getHttpContent(url=self.workSchedule[workNo], extraHeader=self.extraHeader, timeout=self.waitFor)
         if content == '':
             return False
+
         parse = ParseCollection(content)
-        questionInfoDictList, answerDictList = parse.getInfoDict()
+        questionInfoDictList = []
+        answerDictList = []
+        try:
+            questionInfoDictList, answerDictList = parse.getInfoDict()
+        except Exception as error:
+            BaseClass.errorReport(self.workSchedule[workNo], error)
+
         for questionInfoDict in questionInfoDictList:
             self.questionInfoDictList.append(questionInfoDict)
         for answerDict in answerDictList:
