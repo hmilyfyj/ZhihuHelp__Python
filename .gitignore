@@ -220,3 +220,7 @@ misc.xml
 *.db
 *.ini
 .idea/workspace.xml
+.idea/encodings.xml
+zhihuhelp1.7.0/我是登陆知乎时的验证码.gif
+.idea/ZhihuHelp__Python.iml
+.idea/encodings.xml
