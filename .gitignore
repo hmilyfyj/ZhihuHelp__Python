@@ -1,4 +1,4 @@
-#################
+﻿#################
 ## Eclipse
 #################
 
@@ -224,3 +224,4 @@ misc.xml
 zhihuhelp1.7.0/我是登陆知乎时的验证码.gif
 .idea/ZhihuHelp__Python.iml
 .idea/encodings.xml
+.idea/ZhihuHelp__Python.iml

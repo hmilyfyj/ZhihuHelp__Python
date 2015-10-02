@@ -5,6 +5,7 @@ from init import *
 from login import *
 from simpleFilter import *
 from epubBuilder.epubBuilder import *
+from readListParser import ReadListParser
 
 
 class ZhihuHelp(BaseClass):
@@ -21,27 +22,7 @@ class ZhihuHelp(BaseClass):
         self.cursor = self.conn.cursor()
         self.baseDir = os.path.realpath('.')
         self.config = Setting()
-
-        # 初始化网址检测模板
-        self.initBaseResource()
-        return
-
-    def initBaseResource(self):
-        self.urlKindList = ['answer', 'question', 'author', 'collection', 'table', 'topic', 'article', 'column']
-
-        self.urlPattern = {}
-        self.urlPattern['answer'] = r'(?<=zhihu\.com/)question/\d{8}/answer/\d{8}'
-        self.urlPattern['question'] = r'(?<=zhihu\.com/)question/\d{8}'
-
-        # 使用#作为备注起始标识符，所以在正则中要去掉#
-        self.urlPattern['author'] = r'(?<=zhihu\.com/)people/[^/#\n\r]*'
-        self.urlPattern['collection'] = r'(?<=zhihu\.com/)collection/\d*'
-        self.urlPattern['table'] = r'(?<=zhihu\.com/)roundtable/[^/#\n\r]*'
-        self.urlPattern['topic'] = r'(?<=zhihu\.com/)topic/\d*'
-
-        # 先检测专栏，再检测文章，文章比专栏网址更长，类似问题与答案的关系，取信息可以用split('/')的方式获取
-        self.urlPattern['article'] = r'(?<=zhuanlan\.zhihu\.com/)[^/]*/\d{8}'
-        self.urlPattern['column'] = r'(?<=zhuanlan\.zhihu\.com/)[^/#\n\r]*'
+        self.commandParser = ReadListParser()
         return
 
     def baseConfig(self):
@@ -67,87 +48,20 @@ class ZhihuHelp(BaseClass):
         self.config.save()
         return
 
-    def parseLineInfo(self, line):
-        u"""
-        针对传入的一行ReadList数据进行分析
-        """
-        taskCaptureQueen = {}
-        taskCollectionQueen = []
-        #   要求：对ReadList语句进行语法分析，然后生成一串长sql语句
-        #   ReadList转SQL，查出来所有的问题=>答案对即可
-        #   先查出来所有的问题信息,然后查出来所有的答案信息，交由电子书生成器进行整理
-        #
-        for kind in self.urlKindList:
-            taskCaptureQueen[kind + 'Queen'] = []
-        for rawUrl in line.split('$'):
-            urlInfo = self.getUrlInfo(rawUrl)
-            if urlInfo['kind'] == '':
-                continue
-            taskCaptureQueen[urlInfo['kind'] + 'Queen'].append(urlInfo)  # 按网址类别分列表处理
-            taskCollectionQueen.append(urlInfo)
-        BaseClass.logger.info(u"网址分类完毕，开始按类别执行数据抓取工作")
-        return taskCaptureQueen, taskCollectionQueen
-
-    def captureAnswer(self, taskCaptureQueen):
-        u"""
-        根据taskQueen抓取知乎数据
-        """
-        for urlKind in self.urlKindList:
-            taskList = taskCaptureQueen[urlKind + 'Queen']
-            if urlKind == "question":
-                questionQueenWorker = QuestionQueenWorker(self.conn, taskList)  # todo ：执行到这里之后就报错推出了
-                questionQueenWorker.start()  # 只需要执行，不需要返回结果，最后统一进行查询
-            if urlKind == "answer":
-                answerQueenWorker = AnswerQueenWorker(self.conn, taskList)
-                answerQueenWorker.start()
-            if urlKind == "author":
-                for urlInfo in taskList:
-                    authorWorker = AuthorWorker(self.conn, urlInfo)
-                    authorWorker.start()
-            if urlKind == "collection":
-                for urlInfo in taskList:
-                    collectionWorker = CollectionWorker(self.conn, urlInfo)
-                    collectionWorker.start()
-            if urlKind == "topic":
-                for urlInfo in taskList:
-                    topicWorker = TopicWorker(self.conn, urlInfo)
-                    topicWorker.start()
-            if urlKind == "article":
-                for urlInfo in taskList:
-                    articleWorker = ColumnWorker(self.conn, urlInfo)
-                    articleWorker.start()
-            if urlKind == "column":
-                for urlInfo in taskList:
-                    columnWorker = ColumnWorker(self.conn, urlInfo)
-                    columnWorker.start()
-        BaseClass.logger.info(u"网页信息抓取完毕，开始自数据库中生成电子书数据")
-        return
-
-
     def helperStart(self):
         self.baseConfig()
         # 主程序开始运行
         BaseClass.logger.info(u"开始读取ReadList.txt设置信息")
         readList = open('./ReadList.txt', 'r')
         bookCount = 1
+
         for line in readList:
             # 一行内容代表一本电子书
             chapter = 1
             BaseClass.logger.info(u"正在制作第 {0} 本电子书".format(bookCount))
-            BaseClass.logger.info(u"对第 {0} 行的记录 {1} 进行分析".format(chapter, line))
-            # 先将栏目进行分类，以便并行执行，加快速度
-            taskCaptureQueen, taskCollectionQueen = self.parseLineInfo(line)
-            self.captureAnswer(taskCaptureQueen)
+            urlInfoDict = self.commandParser.parseCommandLine(line)
 
-            for urlInfo in taskCollectionQueen:
-                try:
-                    self.addEpubContent(urlInfo['filter'].getResult())
-                except TypeError as error:
-                    print u'没有收集到指定问题'
-                    print u'错误信息:'
-                    print error
-
-            BaseClass.logger.info(u"电子书数据生成完毕，开始生成电子书")
+            BaseClass.logger.info(u"电子书数据收集完毕，开始生成电子书")
             try:
                 if self.epubContent:
                     Zhihu2Epub(self.epubContent)
@@ -158,131 +72,6 @@ class ZhihuHelp(BaseClass):
             self.resetDir()
             bookCount += 1
         return
-
-    def addEpubContent(self, result):
-        u'''
-        分析到的数据为自行制作的Package类型，
-        具有一定的内容分析能力
-        '''
-        try:
-            self.epubContent.merge(result)
-        except AttributeError:
-            self.epubContent = result
-        return
-
-    def detectUrl(self, rawUrl):
-        u"""
-        检测Url类型并返回对应值
-        """
-        urlInfo = {}
-        for key in self.urlKindList:
-            urlInfo['url'] = re.search(self.urlPattern[key], rawUrl)
-            if urlInfo['url'] != None:
-                urlInfo['kind'] = key
-                if key != 'article' and key != 'column':
-                    urlInfo['baseUrl'] = 'http://www.zhihu.com/' + urlInfo['url'].group(0)
-                else:
-                    urlInfo['baseUrl'] = 'http://zhuanlan.zhihu.com/' + urlInfo['url'].group(0)
-                return urlInfo
-        return urlInfo
-
-    def getUrlInfo(self, rawUrl):
-        u"""
-        返回标准格式的网址
-        返回查询所需要的内容
-        urlInfo 结构
-        *   kind
-            *   answer
-                *   questionID
-                *   answerID
-            *   question
-                *   questionID
-            *   author
-                *   authorID
-            *   collection
-                *   colliectionID
-            *   table
-                *   tableID
-            *   topic
-                *   topicID
-            *   article
-                *   columnID
-                *   articleID
-            *   column
-                *   columnID
-        *   guide
-            *   用于输出引导语，告知用户当前工作的状态
-        *   worker
-            *   用于生成抓取对象，负责抓取网页内容
-        *   filter
-            *   用于生成过滤器，负责在数据库中提取答案，并将答案组织成便于生成电子书的结构
-        *   urlInfo
-            *   用于为Author/Topic/Table获取信息
-        *   baseSetting
-            *   基础的设置信息，比如图片质量，过滤标准
-            *   picQuality
-                *   图片质量
-            *   maxThread
-                *   最大线程数
-        """
-        urlInfo = self.detectUrl(rawUrl)
-        if not 'kind' in urlInfo:
-            # 卫语句
-            urlInfo['kind'] = ''
-            return urlInfo
-        urlInfo['baseSetting'] = {}
-        urlInfo['baseSetting']['picQuality'] = SettingClass.PICQUALITY
-        urlInfo['baseSetting']['maxThread'] = SettingClass.MAXTHREAD
-
-        kind = urlInfo['kind']
-        if kind == 'answer':
-            urlInfo['questionID'] = re.search(r'(?<=zhihu\.com/question/)\d{8}', urlInfo['baseUrl']).group(0)
-            urlInfo['answerID'] = re.search(r'(?<=zhihu\.com/question/\d{8}/answer/)\d{8}', urlInfo['baseUrl']).group(0)
-            urlInfo['guide'] = u'成功匹配到答案地址{}，开始执行抓取任务'.format(urlInfo['baseUrl'])
-            urlInfo['worker'] = ''
-            urlInfo['filter'] = AnswerFilter(self.cursor, urlInfo)
-            urlInfo['infoUrl'] = ''
-        if kind == 'question':
-            urlInfo['questionID'] = re.search(r'(?<=zhihu\.com/question/)\d{8}', urlInfo['baseUrl']).group(0)
-            urlInfo['guide'] = u'成功匹配到问题地址{}，开始执行抓取任务'.format(urlInfo['baseUrl'])
-            urlInfo['worker'] = ''
-            urlInfo['filter'] = QuestionFilter(self.cursor, urlInfo)
-            urlInfo['infoUrl'] = ''
-        if kind == 'author':
-            urlInfo['authorID'] = re.search(r'(?<=zhihu\.com/people/)[^/#]*', urlInfo['baseUrl']).group(0)
-            urlInfo['guide'] = u'成功匹配到用户主页地址{}，开始执行抓取任务'.format(urlInfo['baseUrl'])
-            urlInfo['worker'] = AuthorWorker(conn=self.conn, urlInfo=urlInfo)
-            urlInfo['filter'] = AuthorFilter(self.cursor, urlInfo)
-            urlInfo['infoUrl'] = urlInfo['baseUrl'] + '/about'
-        if kind == 'collection':
-            urlInfo['collectionID'] = re.search(r'(?<=zhihu\.com/collection/)\d*', urlInfo['baseUrl']).group(0)
-            urlInfo['guide'] = u'成功匹配到收藏夹地址{}，开始执行抓取任务'.format(urlInfo['baseUrl'])
-            urlInfo['worker'] = CollectionWorker(conn=self.conn, urlInfo=urlInfo)
-            urlInfo['filter'] = CollectionFilter(self.cursor, urlInfo)
-            urlInfo['infoUrl'] = urlInfo['baseUrl']
-        if kind == 'topic':
-            urlInfo['topicID'] = re.search(r'(?<=zhihu\.com/topic/)\d*', urlInfo['baseUrl']).group(0)
-            urlInfo['guide'] = u'成功匹配到话题地址{}，开始执行抓取任务'.format(urlInfo['baseUrl'])
-            urlInfo['worker'] = TopicWorker(conn=self.conn, urlInfo=urlInfo)
-            urlInfo['filter'] = TopicFilter(self.cursor, urlInfo)
-            urlInfo['infoUrl'] = urlInfo['baseUrl']
-        if kind == 'table':
-            urlInfo['tableID'] = re.search(r'(?<=zhihu\.com/roundtable/)[^/#]*', urlInfo['baseUrl']).group(0)
-        if kind == 'article':
-            urlInfo['columnID'] = re.search(r'(?<=zhuanlan\.zhihu\.com/)[^/]*', urlInfo['baseUrl']).group(0)
-            urlInfo['articleID'] = re.search(r'(?<=zhuanlan\.zhihu\.com/' + urlInfo['columnID'] + '/)' + '\d{8}',
-                                             urlInfo['baseUrl']).group(0)
-            urlInfo['worker'] = ColumnWorker(conn=self.conn, urlInfo=urlInfo)
-            urlInfo['filter'] = ArticleFilter(self.cursor, urlInfo)
-            urlInfo['infoUrl'] = urlInfo['baseUrl']
-        if kind == 'column':
-            # 专栏文章的总量并不多，所以获取单篇文章可以和获取全部文章一块完成
-            urlInfo['columnID'] = re.search(r'(?<=zhuanlan\.zhihu\.com/)[^/]*', urlInfo['baseUrl']).group(0)
-            urlInfo['guide'] = u'成功匹配到专栏地址{}，开始执行抓取任务'.format(urlInfo['baseUrl'])
-            urlInfo['worker'] = ColumnWorker(conn=self.conn, urlInfo=urlInfo)
-            urlInfo['filter'] = ColumnFilter(self.cursor, urlInfo)
-            urlInfo['infoUrl'] = urlInfo['baseUrl']
-        return urlInfo
 
     def resetDir(self):
         chdir(self.baseDir)
