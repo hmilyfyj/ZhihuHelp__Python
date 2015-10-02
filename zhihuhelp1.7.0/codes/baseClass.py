@@ -9,6 +9,33 @@ import logging.handlers
 import hashlib
 
 
+class SettingClass(object):
+    u"""
+    用于储存、获取设置值、全局变量值
+    """
+    # 全局变量
+
+
+    DEBUG = True  # debug模式
+
+    # 默认数据库名称
+    dataBaseFileName = u'./zhihuDB_172.db'
+
+    UPDATETIME = '2015-08-16'  # 更新日期
+
+    ACCOUNT = 'mengqingxue2014@qq.com'  # 默认账号密码
+    PASSWORD = '131724qingxue'  #
+    REMEMBERACCOUNT = False  # 是否使用已有密码
+    MAXTHREAD = 20  # 最大线程数
+    PICQUALITY = 1  # 图片质量（0/1/2，无图/标清/原图）
+    MAXQUESTION = 100  # 每本电子书中最多可以放多少个问题
+    MAXTRY = 5  # 最大尝试次数
+    ANSWERORDERBY = 'agree'  # 答案排序原则
+    QUESTIONORDERBY = 'agreeCount'  # 问题排序原则
+    THREADMODE = False  # 线程模式：为False时所有任务均在主线程上执行，用于调试错误
+    COPYRIGHTPROTECT = True  # 保护版权模式，默认打开，打开后不显示禁止转载的答案
+
+
 class BaseClass(object):
     u'''
     用于存放常用函数
@@ -23,8 +50,11 @@ class BaseClass(object):
 
     logger = logging.getLogger('main')  # 获取名为main的logger
     logger.addHandler(handler)  # 为logger添加handler
-    logger.setLevel(logging.INFO)  # 发布时关闭log输出
-    # logger.setLevel(logging.DEBUG)  # debug模式
+
+    if SettingClass.DEBUG:
+        logger.setLevel(logging.DEBUG)  # debug模式
+    else:
+        logger.setLevel(logging.INFO)  # 发布时关闭log输出
 
     MD5 = hashlib.md5()
 
@@ -97,29 +127,6 @@ class BaseClass(object):
     def getHttpFileName(src):
         return src.spilt('/')[-1]
 
-
-class SettingClass(object):
-    u"""
-    用于储存、获取设置值、全局变量值
-    """
-    # 全局变量
-
-    # 默认数据库名称
-    dataBaseFileName = u'./zhihuDB_172.db'
-
-    UPDATETIME = '2015-08-16'  # 更新日期
-
-    ACCOUNT = 'mengqingxue2014@qq.com'  # 默认账号密码
-    PASSWORD = '131724qingxue'  #
-    REMEMBERACCOUNT = False  # 是否使用已有密码
-    MAXTHREAD = 20  # 最大线程数
-    PICQUALITY = 1  # 图片质量（0/1/2，无图/标清/原图）
-    MAXQUESTION = 100  # 每本电子书中最多可以放多少个问题
-    MAXTRY = 5  # 最大尝试次数
-    ANSWERORDERBY = 'agree'  # 答案排序原则
-    QUESTIONORDERBY = 'agreeCount'  # 问题排序原则
-    THREADMODE = False  # 线程模式：为False时所有任务均在主线程上执行，用于调试错误
-    COPYRIGHTPROTECT = True  # 保护版权模式，默认打开，打开后不显示禁止转载的答案
 
 
 class TestClass(object):

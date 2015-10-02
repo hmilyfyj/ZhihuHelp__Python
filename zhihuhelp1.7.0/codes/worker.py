@@ -5,14 +5,26 @@ import json  # 用于JsonWorker
 from contentParse import *
 
 
+class WorkerFactory():
+    u"""
+    适配器
+    """
+
+    def __init__(self, urlInfoKind):
+        self.kindList = ['answer', 'question', 'author', 'collection', 'table', 'topic', 'article', 'column']
+        return
+
+
 class PageWorker(BaseClass, HttpBaseClass, SqlClass):
-    def __init__(self, conn=None, urlInfo={}):
+    """
+    基础类，用于获取以页面形式打开的知乎内容
+    """
+
+    def __init__(self, conn=None, commandInfoList=[]):
         self.conn = conn
         self.cursor = conn.cursor()
         self.maxPage = ''
-        self.urlInfo = urlInfo
-        self.maxThread = SettingClass.MAXTHREAD
-        self.url = urlInfo['baseUrl']
+        self.commandInfoList = commandInfoList
         self.suffix = ''
         self.addProperty()
         self.setCookie()
@@ -95,15 +107,19 @@ class PageWorker(BaseClass, HttpBaseClass, SqlClass):
 class QuestionQueenWorker(PageWorker):
     u"""
     对问题队列进行处理
+    让处理问题的进程独立运行，这样即使崩溃了也不会影响到主进程的执行（生产者消费者？）
     对于页面跳转问题，可以以这个问题作为测试用例
     http://www.zhihu.com/question/21230473?sort=created&nr=1&page=2
-    taskQueen里是一系列的urlInfo
+    taskQueen里是一系列的commandInfo
+    commandInfo结构
+        *   rawUrl
+        *   相关属性（questionID，answerID等）
     """
 
-    def __init__(self, conn=None, taskQueen=[]):
+    def __init__(self, conn=None, commandInfoList=[]):
         self.conn = conn
         self.cursor = conn.cursor()
-        self.taskQueen = taskQueen
+        self.taskQueen = commandInfoList
         self.suffix = ''  # 由addProperty负责重载
         self.addProperty()
         self.setCookie()
@@ -238,8 +254,6 @@ class QuestionQueenWorker(PageWorker):
     def addProperty(self):
         self.maxPage = 1
         self.suffix = '?nr=1&sort=created&page='  # 按时间对答案排序，同时屏蔽跳转
-        self.maxTry = 5
-        self.waitFor = 5
         return
 
 

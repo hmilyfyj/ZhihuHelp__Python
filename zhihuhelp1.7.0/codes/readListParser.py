@@ -30,15 +30,16 @@ class ReadListParser():
 
     # url模式
     urlPattern = {}
-    urlPattern['answer'] = r'(?<=zhihu\.com/)question/\d{8}/answer/\d{8}'
-    urlPattern['question'] = r'(?<=zhihu\.com/)question/\d{8}'
-    urlPattern['author'] = r'(?<=zhihu\.com/)people/[^/\n\r]*'
-    urlPattern['collection'] = r'(?<=zhihu\.com/)collection/\d*'
-    urlPattern['table'] = r'(?<=zhihu\.com/)roundtable/[^/\n\r]*'
-    urlPattern['topic'] = r'(?<=zhihu\.com/)topic/\d*'
-    urlPattern['article'] = r'(?<=zhuanlan\.zhihu\.com/)[^/]*/\d{8}'
-    urlPattern['column'] = r'(?<=zhuanlan\.zhihu\.com/)[^/\n\r]*'
+    urlPattern['answer'] = r'(?<=zhihu\.com/)question/(?P<questionID>\d{8})/answer/(?P<answerID>\d{8})'
+    urlPattern['question'] = r'(?<=zhihu\.com/)question/(?P<questionID>\d{8})'
+    urlPattern['author'] = r'(?<=zhihu\.com/)people/(?P<authorID>[^/\n\r]*)'
+    urlPattern['collection'] = r'(?<=zhihu\.com/)collection/(?P<collectionID>\d*)'
+    urlPattern['table'] = r'(?<=zhihu\.com/)roundtable/(?P<tableID>[^/\n\r]*)'
+    urlPattern['topic'] = r'(?<=zhihu\.com/)topic/(?P<topicID>\d*)'
+    urlPattern['article'] = r'(?<=zhuanlan\.zhihu\.com/)(?P<columnID>[^/]*)/(?P<articleID>\d{8})'
+    urlPattern['column'] = r'(?<=zhuanlan\.zhihu\.com/)(?P<columnID>[^/\n\r]*)'
 
+    @staticmethod
     def parseCommandLine(commandLine):
         u"""
         用于分析指令
@@ -62,18 +63,19 @@ class ReadListParser():
 
 
 def initUrlInfoDict():
-    urlInfoDict = {}
+    urlInfoDict = {
+        'filter': {
+            'answer': '',
+            'article': '',
+            'infoList': [],
+        }}
     for kind in ReadListParser.urlKindList:
         urlInfoDict[kind] = {
             'kind': kind,
             'commandInfoList': [],
             'filterList': [],
-            'filter': {
-                'answer': '',
-                'article': '',
-                'infoList': [],
-            }
         }
+
     return urlInfoDict
 
 
@@ -94,12 +96,14 @@ def mergeFilter(urlInfoDict):
         for filterDict in urlInfoDict[kind]['filterList']:
             answerSql += " or ({}) ".format(filterDict['answer'])
     answerSql += ') {};'.format(otherCondition)
+    urlInfoDict['filter']['answer'] = answerSql
 
     # 合并article选择条件
     for kind in articleKindList:
         for filterDict in urlInfoDict[kind]['filterList']:
             articleSql += " or ({}) ".format(filterDict['article'])
     articleSql += ') {};'.format(otherCondition)
+    urlInfoDict['filter']['article'] = articleSql
 
     # 合并info选择条件
     infoKindList = ['author', 'collection', 'table', 'topic', 'article', 'column']
@@ -137,7 +141,7 @@ def parseCommandFactory(command=''):
 
     def parseQuestion(command):
         result = re.search(ReadListParser.urlPattern['question'], command)
-        questionID = result.group(0)
+        questionID = result.group('questionID')
         infoFilterBySQL = ''  # "select * from QuestionInfo where questionID = {}".format(questionID)
         answerFilterBySQL = "questionID = {}".format(questionID)
         urlInfo = {}
@@ -152,8 +156,8 @@ def parseCommandFactory(command=''):
 
     def parseAnswer(command):
         result = re.search(ReadListParser.urlPattern['answer'], command)
-        questionID = result.group(0)
-        answerID = result.group(1)
+        questionID = result.group('questionID')
+        answerID = result.group('answerID')
         infoFilterBySQL = ''  # "select * from QuestionInfo where questionID = {}".format(questionID)
         answerFilterBySQL = "questionID = {} and answerID = {}".format(questionID, answerID)
         urlInfo = {}
@@ -169,7 +173,7 @@ def parseCommandFactory(command=''):
 
     def parseAuthor(command):
         result = re.search(ReadListParser.urlPattern['author'], command)
-        authorID = result.group(0)
+        authorID = result.group('authorID')
         infoFilterBySQL = "select * from AuthorInfo where authorID = {}".format(authorID)
         answerFilterBySQL = "authorID = {}".format(authorID)
         urlInfo = {}
@@ -184,7 +188,7 @@ def parseCommandFactory(command=''):
 
     def parseCollection(command):
         result = re.search(ReadListParser.urlPattern['collection'], command)
-        collectionID = result.group(0)
+        collectionID = result.group('collectionID')
         infoFilterBySQL = "select * from CollectionInfo where collectionID = {}".format(collectionID)
         answerFilterBySQL = "answerHref in (select answerHref from CollectionIndex where collectionID = {})".format(
             collectionID)
@@ -200,7 +204,7 @@ def parseCommandFactory(command=''):
 
     def parseTable(command):
         result = re.search(ReadListParser.urlPattern['table'], command)
-        tableID = result.group(0)
+        tableID = result.group('tableID')
         infoFilterBySQL = "select * from TableInfo where tableID = {}".format(tableID)
         answerFilterBySQL = "answerHref in (select answerHref from TableIndex where tableID = {})".format(tableID)
         urlInfo = {}
@@ -215,7 +219,7 @@ def parseCommandFactory(command=''):
 
     def parseTopic(command):
         result = re.search(ReadListParser.urlPattern['topic'], command)
-        topicID = result.group(0)
+        topicID = result.group('topicID')
         infoFilterBySQL = "select * from TopicInfo where topicID = {}".format(topicID)
         answerFilterBySQL = "answerHref in (select answerHref from TopicIndex where topicID = {})".format(topicID)
         urlInfo = {}
@@ -230,8 +234,8 @@ def parseCommandFactory(command=''):
 
     def parseArticle(command):
         result = re.search(ReadListParser.urlPattern['article'], command)
-        columnID = result.group(0)
-        articleID = result.group(1)
+        columnID = result.group('columnID')
+        articleID = result.group('articleID')
         infoFilterBySQL = "select * from ColumnInfo where columnID = {}".format(columnID)
         articleFilterBySQL = "columnID = {} and articleID = {}".format(columnID, articleID)
         urlInfo = {}
@@ -247,14 +251,14 @@ def parseCommandFactory(command=''):
 
     def parseColumn(command):
         result = re.search(ReadListParser.urlPattern['column'], command)
-        columnID = result.group(0)
+        columnID = result.group('columnID')
         infoFilterBySQL = "select * from ColumnInfo where columnID = {}".format(columnID)
         articleFilterBySQL = "columnID = {}".format(columnID)
         urlInfo = {}
         urlInfo['kind'] = 'column'
         urlInfo['commandInfo'] = {}
         urlInfo['commandInfo']['columnID'] = columnID
-        urlInfo['commandInfo']['rawUrl'] = "http://zhuanlan.zhihu.com/{}".format(columnIDD)
+        urlInfo['commandInfo']['rawUrl'] = "http://zhuanlan.zhihu.com/{}".format(columnID)
         urlInfo['filter'] = {}
         urlInfo['filter']['info'] = infoFilterBySQL
         urlInfo['filter']['article'] = articleFilterBySQL
