@@ -553,17 +553,14 @@ class JsonWorker(PageWorker):
     用于获取返回值为Json格式的网页内容
     '''
 
-    def __init__(self, conn=None, urlInfo={}):
+    def __init__(self, conn=None, commandInfoList=[]):
         self.conn = conn
         self.cursor = conn.cursor()
         self.maxPage = ''
-        self.urlInfo = urlInfo
-        self.maxThread = urlInfo['baseSetting']['maxThread']
-        self.url = urlInfo['baseUrl']
+        self.commandInfoList = commandInfoList
         self.suffix = ''
         self.addProperty()
         self.setCookie()
-        self.setWorkSchedule()
         return
 
     def getJsonContent(self, url='', extraHeader={}, data=None, timeout=5):
@@ -592,14 +589,31 @@ class ColumnWorker(JsonWorker):
     def addProperty(self):
         self.maxPage = 1
         self.suffix = ''
-        self.maxTry = 5
         self.waitFor = 5
 
         self.columnInfo = {}
         return
 
+    def start(self):
+        for commandInfo in self.commandInfoList:
+            self.commandInfo = commandInfo
+            self.setWorkSchedule()
+            self.startOne()
+
+    def startOne(self):
+        self.url = 'http://zhuanlan.zhihu.com/' + self.commandInfo['columnID']
+        self.complete = set()
+        if not self.columnInfo:
+            return
+        maxTry = SettingClass.MAXTRY
+        while maxTry > 0 and len(self.workSchedule) > len(self.complete):
+            self.leader()
+            maxTry -= 1
+        return
+
+
     def getColumnInfo(self):
-        rawInfo = self.getJsonContent(url='http://zhuanlan.zhihu.com/api/columns/' + self.urlInfo['columnID'])
+        rawInfo = self.getJsonContent(url='http://zhuanlan.zhihu.com/api/columns/' + self.commandInfo['columnID'])
         if not rawInfo:
             return False
 
@@ -623,7 +637,7 @@ class ColumnWorker(JsonWorker):
 
     def setWorkSchedule(self):
         print u'开始获取专栏信息'
-        maxTry = self.maxTry
+        maxTry = SettingClass.MAXTRY
         while maxTry > 0 and not self.getColumnInfo():
             maxTry -= 1
             print u'第{}次尝试获取专栏信息失败'.format(self.maxTry - maxTry)
@@ -633,7 +647,8 @@ class ColumnWorker(JsonWorker):
         else:
             print u'获取专栏信息成功'
         self.workSchedule = {}
-        detectUrl = 'http://zhuanlan.zhihu.com/api/columns/{}/posts?limit=10&offset='.format(self.urlInfo['columnID'])
+        detectUrl = 'http://zhuanlan.zhihu.com/api/columns/{}/posts?limit=10&offset='.format(
+            self.commandInfo['columnID'])
         for i in range(self.columnInfo['articleCount'] / 10 + 1):
             self.workSchedule[i] = detectUrl + str(i * 10)
         # 将专栏信息储存至数据库中
@@ -641,15 +656,6 @@ class ColumnWorker(JsonWorker):
         self.conn.commit()
         return
 
-    def start(self):
-        self.complete = set()
-        if not self.columnInfo:
-            return
-        maxTry = self.maxTry
-        while maxTry > 0 and len(self.workSchedule) > len(self.complete):
-            self.leader()
-            maxTry -= 1
-        return
 
     def leader(self):
         threadPool = []
@@ -659,7 +665,7 @@ class ColumnWorker(JsonWorker):
         threadsCount = len(threadPool)
         threadLiving = 2
         while (threadsCount > 0 or threadLiving > 1):
-            bufLength = self.maxThread - threadLiving
+            bufLength = SettingClass.MAXTHREAD - threadLiving
             if bufLength > 0 and threadsCount > 0:
                 while bufLength > 0 and threadsCount > 0:
                     # todo : 还没有在这里做线程控制体系，记得回来添上
