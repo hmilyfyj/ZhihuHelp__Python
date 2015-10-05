@@ -688,7 +688,6 @@ class ColumnWorker(JsonWorker):
     def worker(self, workNo=0):
         u"""
         worker只执行一次，待全部worker执行完毕后由调用函数决定哪些worker需要再次运行
-        重复的次数由self.maxTry指定
         这样可以给知乎服务器留出生成页面缓存的时间
         """
         if workNo in self.complete:
