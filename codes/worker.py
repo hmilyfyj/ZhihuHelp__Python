@@ -11,10 +11,30 @@ class WorkerFactory():
     适配器
     """
 
-    def __init__(self, commandInfoKind):
-        self.kindList = ['answer', 'question', 'author', 'collection', 'table', 'topic', 'article', 'column']
+    def __init__(self, conn, commandInfoDict={}):
+        kindList = ['answer', 'question', 'author', 'collection', 'table', 'topic', 'article', 'column']
+
+        for kind in commandInfoDict.keys():
+            commandInfoList = commandInfoDict[kind]['commandInfoList']
+            self.workerStart(kind, conn, commandInfoList)
         return
 
+    def workerStart(self, kind, conn, commandInfoList):
+        if kind == 'answer':
+            AnswerWorker(conn, commandInfoList).start()
+        if kind == 'question':
+            QuestionWorker(conn, commandInfoList).start()
+        if kind == 'author':
+            AuthorWorker(conn, commandInfoList).start()
+        if kind == 'collection':
+            CollectionWorker(conn, commandInfoList).start()
+        if kind == 'topic':
+            TopicWorker(conn, commandInfoList).start()
+        if kind == 'article':
+            ColumnWorker(conn, commandInfoList).start()
+        if kind == 'column':
+            ColumnWorker(conn, commandInfoList).start()
+        return
 
 class PageWorker(BaseClass, HttpBaseClass, SqlClass):
     """
@@ -106,7 +126,7 @@ class PageWorker(BaseClass, HttpBaseClass, SqlClass):
         return
 
 
-class QuestionQueenWorker(PageWorker):
+class QuestionWorker(PageWorker):
     u"""
     对问题队列进行处理
     让处理问题的进程独立运行，这样即使崩溃了也不会影响到主进程的执行（生产者消费者？）
@@ -265,7 +285,7 @@ class QuestionQueenWorker(PageWorker):
         return
 
 
-class AnswerQueenWorker(QuestionQueenWorker):
+class AnswerWorker(QuestionWorker):
     def addProperty(self):
         self.maxPage = ''
         self.suffix = ''

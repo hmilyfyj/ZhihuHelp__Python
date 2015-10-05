@@ -59,9 +59,10 @@ class ZhihuHelp(BaseClass):
             # 一行内容代表一本电子书
             chapter = 1
             BaseClass.logger.info(u"正在制作第 {0} 本电子书".format(bookCount))
-            urlInfoDict = self.commandParser.parseCommandLine(line)
+            commandInfoDict = self.commandParser.parseCommandLine(line)
+            WorkerFactory(self.conn, commandInfoDict)
+            BaseClass.logger.info(u"电子书数据抓取完毕，开始生成电子书")
 
-            BaseClass.logger.info(u"电子书数据收集完毕，开始生成电子书")
             try:
                 if self.epubContent:
                     Zhihu2Epub(self.epubContent)

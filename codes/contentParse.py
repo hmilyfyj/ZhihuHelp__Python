@@ -6,111 +6,8 @@ import datetime  # 简单处理时间
 from baseClass import *
 from bs4 import BeautifulSoup
 
-"""
-#todo 这一块也需要改正，很有可能出现没找到对应元素，对None取值的情况
-"""
 
-class Parse(BaseClass):
-    def __init__(self, content):
-        BaseClass.logger.debug(u"开始解析网页")
-        self.content = BeautifulSoup(content, 'html.parser')
-        self.rawContent = content
-
-    def getAnswerAuthorInfoDict(self, content):
-        personInfo = {}
-        if content.find('h3', {'class': 'zm-item-answer-author-wrap'}).img is None:
-            # 匿名用户
-            personInfo['authorID'] = u"coder'sGirlFriend~"
-            personInfo['authorSign'] = u''
-            personInfo['authorLogo'] = u'http://pic1.zhimg.com/da8e974dc_s.jpg'
-            personInfo['authorName'] = u'匿名用户'
-        else:
-            # 可能为空
-            personInfo['authorID'] = self.getContentAttr(
-                content.find('h3', {'class': 'zm-item-answer-author-wrap'}).find('a', {'class': 'zm-item-link-avatar'}),
-                'href')
-            personInfo['authorID'] = self.matchAuthorID(personInfo['authorID'])
-            personInfo['authorSign'] = self.getContentAttr(
-                content.find('h3', {'class': 'zm-item-answer-author-wrap'}).find('strong',
-                                                                                 {'class': 'zu-question-my-bio'}),
-                'title')
-            personInfo['authorLogo'] = self.getContentAttr(
-                content.find('h3', {'class': 'zm-item-answer-author-wrap'}).img, 'data-source')
-            personInfo['authorName'] = content.find('h3', {'class': 'zm-item-answer-author-wrap'}).find_all('a')[1].text
-            for key in personInfo:
-                personInfo[key] = unicode(personInfo[key])
-        return personInfo
-
-    def getAnswerContentList(self):
-        u"""
-        取得答案列表
-        需重载
-        """
-        return self.content.find_all('div')
-
-    def getAnswerDict(self, content):
-        u"""
-        content作为已经切分好了的答案bs_tag对象传入
-        不要乱传参
-        """
-        answerDict = {}
-        authorInfo = self.getAnswerAuthorInfoDict(content)
-        for key in authorInfo:
-            answerDict[key] = authorInfo[key]
-        # 需要移除<noscript>中的内容
-        # 需要考虑对『违反当前法律法规，暂不予以显示』内容的处理
-        bufferString = content.find("div", {"class": "zm-item-vote"})
-        if bufferString is None:
-            answerDict['answerAgreeCount'] = self.getContentAttr(content.find("div", {"class": "zm-item-vote-info"}),
-                                                                 'data-votecount', 0)
-        else:
-            answerDict['answerAgreeCount'] = self.getContentAttr(
-                bufferString.find("a", {"class": "zm-item-vote-count"}), 'data-votecount', 0)
-        if content.find('div', {'id': 'answer-status'}) != None:
-            answerDict['answerContent'] = u'<p>回答被建议修改：包含少儿不宜的内容</p>'
-            answerDict["updateDate"] = '1970-01-01'
-            answerDict["commitDate"] = '1970-01-01'
-            answerDict["noRecordFlag"] = 0
-            answerDict["answerCommentCount"] = 0
-        else:
-            bufferString = content.find("div", {"class": "zm-item-rich-text", "data-action": "/answer/content"})
-            if bufferString.find("textarea", {"class", "content"}) is None:
-                # 单个问题&答案
-                answerDict['answerContent'] = self.getTagContent(
-                    bufferString.find("div", {"class", "zm-editable-content"}))
-            else:
-                answerDict['answerContent'] = self.getTagContent(bufferString.find("textarea", {"class", "content"}))
-            answerDict["updateDate"] = content.find("span", {"class": "answer-date-link-wrap"}).text
-            answerDict["commitDate"] = self.getContentAttr(content.find("span", {"class": "answer-date-link-wrap"}).a,
-                                                           "data-tip")
-            answerDict["noRecordFlag"] = self.getContentAttr(
-                content.find("div", {"class": "zm-meta-panel"}).find("a", {"class": "copyright"}), "data-author-avatar")
-            answerDict["answerCommentCount"] = self.matchInt(content.find("a", {"name": "addcomment"}).text)
-
-        answerLink = self.getContentAttr(content.find("a", {"class": "answer-date-link"}), "href")
-        answerDict["questionID"] = self.matchQuestionID(answerLink)
-        answerDict["answerID"] = self.matchAnswerID(answerLink)
-
-        if answerDict['answerAgreeCount'] == '':
-            answerDict['answerAgreeCount'] = 0
-        if answerDict['noRecordFlag'] == '':
-            answerDict['noRecordFlag'] = 0
-        else:
-            answerDict['noRecordFlag'] = 1
-        answerDict['answerHref'] = 'http://www.zhihu.com/question/{0}/answer/{1}'.format(answerDict['questionID'],
-                                                                                         answerDict['answerID'])
-        answerDict['answerContent'] = HTMLParser.HTMLParser().unescape(answerDict['answerContent'])  # 对网页内容解码，可以进一步优化
-
-        if answerDict['commitDate'] == '':
-            answerDict['commitDate'] = answerDict['updateDate']
-        for key in ['updateDate', 'commitDate']:  # 此处的时间格式转换还可以进一步改进
-            if len(answerDict[key]) != 10:
-                if len(answerDict[key]) == 0:
-                    answerDict[key] = self.getYesterday().isoformat()
-                else:
-                    answerDict[key] = datetime.date.today().isoformat()
-        return answerDict
-
+class BasePraser(BaseClass):
     def getYesterday(self):
         today = datetime.date.today()
         oneday = datetime.timedelta(days=1)
@@ -144,18 +41,187 @@ class Parse(BaseClass):
         思路来自stackoverflow，http://stackoverflow.com/questions/8112922/beautifulsoup-innerhtml
         帅爆了！
         '''
-        content = unicode(tag)
-        content = "".join([unicode(x) for x in tag.contents])
-        return content
+        return "".join([unicode(x) for x in tag.contents])
 
-    def getContentAttr(self, content, attr, defaultValue=""):
+    def get_attr(self, dom, attr, defaultValue=""):
         u"""
         获取bs中tag.content的指定属性
         若content为空或者没有指定属性则返回默认值
         """
-        if content == None:
+        if dom == None:
             return defaultValue
-        return content.get(attr, defaultValue)
+        return dom.get(attr, defaultValue)
+
+
+class AuthorInfo(BasePraser):
+    """
+    实践一把《代码整洁之道》的做法，以后函数尽量控制在5行之内
+    """
+    def __init__(self, dom = None):
+        self.set_dom(dom)
+        return
+
+    def set_dom(self, dom):
+        self.info = {}
+        if not (dom is None):
+            self.dom = dom.find('div', class_='zm-item-answer-author-info')
+        return
+
+    def get_info(self):
+        self.parse_info()
+        return self.info
+
+    def parse_info(self):
+        if self.dom.find('img') is None:
+            self.get_anonymous_info()
+        else:
+            self.get_author_info()
+        return
+
+    def get_author_info(self):
+        self.get_author_id()
+        self.get_author_sign()
+        self.get_author_logo()
+        self.get_author_name()
+        return
+
+    def get_anonymous_info(self):
+        self.info['authorID'] = u"coder'sGirlFriend~"
+        self.info['authorSign'] = u''
+        self.info['authorLogo'] = u'http://pic1.zhimg.com/da8e974dc_s.jpg'
+        self.info['authorName'] = u'匿名用户'
+        return
+
+    def get_author_id(self):
+        author = self.dom.find('a', class_='zm-item-link-avatar')
+        link = self.get_attr(author, 'href')
+        self.info['authorID'] = self.matchAnswerID(link)
+        return
+
+    def get_author_sign(self):
+        sign = self.dom.find('strong', class_='zu-question-my-bio')
+        self.info['authorSign'] = self.get_attr(sign, 'title')
+        return
+
+    def get_author_logo(self):
+        self.info['authorLogo'] = self.get_attr(self.dom.find('img'), 'src')
+        return
+
+    def get_author_name(self):
+        self.info['authorName'] = self.dom.find('a')[-1].text
+        return
+
+
+class AnswerInfo(BasePraser):
+    def __init__(self, dom = None):
+        self.set_dom(dom)
+        return
+
+    def set_dom(self, dom):
+        self.info = {}
+        if not (dom is None):
+            self.header_dom = dom.find('div', class_='zm-item-vote-info')
+            self.footer_dom = dom.find('div', class_='zm-meta-panel')
+        return
+
+    def get_info(self):
+        self.parse_info()
+        return self.info
+
+    def get_vote_count(self):
+        self.info['answerAgreeCount'] = self.get_attr(self.header_dom, 'data-votecount')
+        return
+
+
+
+class Parse(BasePraser):
+
+    def __init__(self, content):
+        BaseClass.logger.debug(u"开始解析网页")
+        self.dom = BeautifulSoup(content, 'html.parser')
+        self.rawContent = content
+        self.init_property()
+
+    def init_property(self):
+        """
+        初始化基本属性
+        """
+        self.authorInfo = AuthorInfo()
+        return
+
+    def get_author_info(self, dom):
+        self.authorInfo.set_dom(dom)
+        return self.authorInfo.get_info()
+
+    def get_answer_list(self):
+        u"""
+        取得答案列表
+        需重载
+        """
+        return self.dom.find_all('div')
+
+    def get_answer(self, dom):
+        u"""
+        content作为已经切分好了的答案bs_tag对象传入
+        不要乱传参
+        """
+        answerDict = {}
+        authorInfo = self.get_author_info(dom)
+        for key in authorInfo:
+            answerDict[key] = authorInfo[key]
+        # 需要移除<noscript>中的内容
+        # 需要考虑对『违反当前法律法规，暂不予以显示』内容的处理
+        bufferString = dom.find("div", {"class": "zm-item-vote"})
+        if bufferString is None:
+            answerDict['answerAgreeCount'] = self.get_attr(dom.find("div", {"class": "zm-item-vote-info"}),
+                                                           'data-votecount', 0)
+        else:
+            answerDict['answerAgreeCount'] = self.get_attr(bufferString.find("a", {"class": "zm-item-vote-count"}),
+                                                           'data-votecount', 0)
+        if dom.find('div', {'id': 'answer-status'}) != None:
+            answerDict['answerContent'] = u'<p>回答被建议修改：包含少儿不宜的内容</p>'
+            answerDict["updateDate"] = '1970-01-01'
+            answerDict["commitDate"] = '1970-01-01'
+            answerDict["noRecordFlag"] = 0
+            answerDict["answerCommentCount"] = 0
+        else:
+            bufferString = dom.find("div", {"class": "zm-item-rich-text", "data-action": "/answer/content"})
+            if bufferString.find("textarea", {"class", "content"}) is None:
+                # 单个问题&答案
+                answerDict['answerContent'] = self.getTagContent(
+                    bufferString.find("div", {"class", "zm-editable-content"}))
+            else:
+                answerDict['answerContent'] = self.getTagContent(bufferString.find("textarea", {"class", "content"}))
+            answerDict["updateDate"] = dom.find("span", {"class": "answer-date-link-wrap"}).text
+            answerDict["commitDate"] = self.get_attr(dom.find("span", {"class": "answer-date-link-wrap"}).a,
+                                                     "data-tip")
+            answerDict["noRecordFlag"] = self.get_attr(
+                dom.find("div", {"class": "zm-meta-panel"}).find("a", {"class": "copyright"}), "data-author-avatar")
+            answerDict["answerCommentCount"] = self.matchInt(dom.find("a", {"name": "addcomment"}).text)
+
+        answerLink = self.get_attr(dom.find("a", {"class": "answer-date-link"}), "href")
+        answerDict["questionID"] = self.matchQuestionID(answerLink)
+        answerDict["answerID"] = self.matchAnswerID(answerLink)
+
+        if answerDict['answerAgreeCount'] == '':
+            answerDict['answerAgreeCount'] = 0
+        if answerDict['noRecordFlag'] == '':
+            answerDict['noRecordFlag'] = 0
+        else:
+            answerDict['noRecordFlag'] = 1
+        answerDict['answerHref'] = 'http://www.zhihu.com/question/{0}/answer/{1}'.format(answerDict['questionID'],
+                                                                                         answerDict['answerID'])
+        answerDict['answerContent'] = HTMLParser.HTMLParser().unescape(answerDict['answerContent'])  # 对网页内容解码，可以进一步优化
+
+        if answerDict['commitDate'] == '':
+            answerDict['commitDate'] = answerDict['updateDate']
+        for key in ['updateDate', 'commitDate']:  # 此处的时间格式转换还可以进一步改进
+            if len(answerDict[key]) != 10:
+                if len(answerDict[key]) == 0:
+                    answerDict[key] = self.getYesterday().isoformat()
+                else:
+                    answerDict[key] = datetime.date.today().isoformat()
+        return answerDict
 
 
 class ParseQuestion(Parse):
@@ -185,7 +251,7 @@ class ParseQuestion(Parse):
         questionInfoDict['questionCommentCount'] = self.matchInt(bufString)
         questionInfoDict['questionDesc'] = self.getTagContent(
             self.content.find("div", {"id": "zh-question-detail"}).find('div'))
-        bufString = self.getContentAttr(self.content.find("h3", {"id": "zh-question-answer-num"}), 'data-num')
+        bufString = self.get_attr(self.content.find("h3", {"id": "zh-question-answer-num"}), 'data-num')
         questionInfoDict['questionAnswerCount'] = self.matchInt(bufString)
 
         bufString = self.content.find("div", {"id": "zh-question-side-header-wrap"}).find("div", {
@@ -198,7 +264,7 @@ class ParseQuestion(Parse):
             self.content.find("div", {"class": "zu-main-sidebar"}).find_all("div", {"class": "zm-side-section"})[
                 -1].find_all("div", {"class": "zg-gray-normal"})[1].find("strong").text
         questionInfoDict['questionViewCount'] = bufString
-        questionInfoDict['questionIDinQuestionDesc'] = self.getContentAttr(
+        questionInfoDict['questionIDinQuestionDesc'] = self.get_attr(
             self.content.find("div", {'id': 'zh-single-question-page'}), 'data-urltoken')
         return questionInfoDict
 
@@ -226,7 +292,7 @@ class ParseAnswer(ParseQuestion):
                                                                                 {"class": "zm-side-section"}).find(
             "div", {"class": "zg-gray-normal"}).find("strong").text
         questionInfoDict['questionViewCount'] = bufString
-        rawLink = self.getContentAttr(self.content.find("link", {'rel': 'canonical'}), 'href')
+        rawLink = self.get_attr(self.content.find("link", {'rel': 'canonical'}), 'href')
         questionInfoDict['questionIDinQuestionDesc'] = self.matchQuestionID(rawLink)
         return questionInfoDict
 
@@ -240,7 +306,12 @@ class ParseAuthor(Parse):
     '''
 
     def getAnswerContentList(self):
-        return self.content.find("div", {"id": "zh-profile-answer-list"}).find_all("div", {"class": "zm-item"})
+        u"""
+        返回答案内容列表
+        用户界面中一定会有#zh-profile-answer-list元素
+        所以不必担心
+        """
+        return self.content.find(id="zh-profile-answer-list").find_all("div", {"class": "zm-item"})
 
     def getInfoDict(self):
         contentList = self.getAnswerContentList()
@@ -264,7 +335,7 @@ class ParseAuthor(Parse):
         if questionTitle is None:
             return lastQuestionInfoDict
         questionInfoDict['questionTitle'] = questionTitle.get_text()
-        rawLink = self.getContentAttr(content.find("a", {'class': "question_link"}), 'href')
+        rawLink = self.get_attr(content.find("a", {'class': "question_link"}), 'href')
         questionInfoDict['questionIDinQuestionDesc'] = self.matchQuestionID(rawLink)
         return questionInfoDict
 
@@ -283,7 +354,7 @@ class ParseCollection(ParseAuthor):
         if questionTitle is None:
             return lastQuestionInfoDict
         questionInfoDict['questionTitle'] = content.find('h2', {'class': 'zm-item-title'}).get_text()
-        rawLink = self.getContentAttr(content.find('h2', {'class': 'zm-item-title'}).a, 'href')
+        rawLink = self.get_attr(content.find('h2', {'class': 'zm-item-title'}).a, 'href')
         questionInfoDict['questionIDinQuestionDesc'] = self.matchQuestionID(rawLink)
         return questionInfoDict
 
@@ -306,17 +377,16 @@ class AuthorInfoParse(Parse):
     def getInfoDict(self):
         infoDict = {}
 
-        infoDict['dataID'] = self.getContentAttr(self.content.find("button", {'class': 'zm-rich-follow-btn'}),
-                                                 'data-id')
-        infoDict['authorLogoAddress'] = self.getContentAttr(self.content.find('img', {'class': 'avatar-l'}), 'src')
-        infoDict['weiboAddress'] = self.getContentAttr(
-            self.content.find('a', {'class': 'zm-profile-header-user-weibo'}), 'href')
+        infoDict['dataID'] = self.get_attr(self.content.find("button", {'class': 'zm-rich-follow-btn'}), 'data-id')
+        infoDict['authorLogoAddress'] = self.get_attr(self.content.find('img', {'class': 'avatar-l'}), 'src')
+        infoDict['weiboAddress'] = self.get_attr(self.content.find('a', {'class': 'zm-profile-header-user-weibo'}),
+                                                 'href')
         infoDict['watched'] = self.matchInt(
             self.content.find_all('div', {'class': 'zm-side-section-inner'})[-1].span.strong.get_text())
         infoDict['authorID'] = self.matchAuthorID(
-            self.getContentAttr(self.content.find('div', {'class': 'title-section'}).a, 'href'))
+            self.get_attr(self.content.find('div', {'class': 'title-section'}).a, 'href'))
         infoDict['name'] = self.content.find('div', {'class': 'title-section'}).find(attrs={'class': 'name'}).get_text()
-        infoDict['sign'] = self.getContentAttr(
+        infoDict['sign'] = self.get_attr(
             self.content.find('div', {'class': 'title-section'}).find(attrs={'class': 'bio'}), 'title')
 
         try:
@@ -355,9 +425,8 @@ class TopicInfoParse(Parse):
         infoDict['description'] = self.getTagContent(
             self.content.find('div', {'id': 'zh-topic-desc'}).find('div', 'zm-editable-content'))
         infoDict['topicID'] = self.matchInt(
-            self.getContentAttr(self.content.find('a', {'id': 'zh-avartar-edit-form'}), 'href'))
-        infoDict['logoAddress'] = self.getContentAttr(self.content.find('img', {'class': 'zm-avatar-editor-preview'}),
-                                                      'src')
+            self.get_attr(self.content.find('a', {'id': 'zh-avartar-edit-form'}), 'href'))
+        infoDict['logoAddress'] = self.get_attr(self.content.find('img', {'class': 'zm-avatar-editor-preview'}), 'src')
         infoDict['logoAddress'] = self.matchInt(
             self.getTagContent(self.content.find('div', {'class': 'zm-topic-side-followers-info'})))
         return infoDict
@@ -371,7 +440,7 @@ class CollectionInfoParse(Parse):
         infoDict['title'] = self.getTagContent(self.content.find('h2', {'id': 'zh-fav-head-title'}))
         infoDict['description'] = self.getTagContent(self.content.find('div', {'id': 'zh-fav-head-description'}))
         infoDict['collectionID'] = self.matchInt(
-            self.getContentAttr(self.content.find('div', {'id': 'zh-list-meta-wrap'}).find_all('a')[1], 'href'))
+            self.get_attr(self.content.find('div', {'id': 'zh-list-meta-wrap'}).find_all('a')[1], 'href'))
         infoDict['commentCount'] = self.matchInt(
             self.getTagContent(self.content.find('div', {'id': 'zh-list-meta-wrap'}).find('a', {'name': 'addcomment'})))
         infoDict['followerCount'] = self.matchInt(
@@ -379,7 +448,7 @@ class CollectionInfoParse(Parse):
                 1].a.get_text())
 
         infoDict['authorID'] = self.matchAuthorID(
-            self.getContentAttr(self.content.find('a', {'class': 'zm-list-avatar-link'}), 'href'))
+            self.get_attr(self.content.find('a', {'class': 'zm-list-avatar-link'}), 'href'))
         infoDict['authorSign'] = self.content.find('div', {'id': 'zh-single-answer-author-info'}).find('div',
                                                                                                        'zg-gray-normal').get_text()
         infoDict['authorName'] = self.content.find('div', {'id': 'zh-single-answer-author-info'}).a.get_text()
