@@ -2,8 +2,7 @@
 
 import json  # 用于JsonWorker
 
-
-from contentParse import *
+from codes.Parser.contentParse import *
 
 
 class WorkerFactory():
