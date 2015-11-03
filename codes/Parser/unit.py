@@ -297,8 +297,6 @@ class Question(ParserTools):
         return
 
 
-
-
 class BaseParser(ParserTools):
     author_info_parser = AuthorInfo()
     answer_parser = Answer()
